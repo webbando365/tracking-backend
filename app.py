@@ -1,141 +1,95 @@
+import os
+import json
+import uuid
+import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import uuid
-from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
-import os
 
+# Configurazione Flask
 app = Flask(__name__)
-CORS(app)  # Abilita CORS per tutte le richieste
+CORS(app)
 
-# --------------------------
-# Configurazione Google Sheet
-# --------------------------
-SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-CREDS = Credentials.from_service_account_file('credenziali.json', scopes=SCOPE)
-CLIENT = gspread.authorize(CREDS)
-SHEET = CLIENT.open_by_key("16v-pieF7pQt7GMoTnjknCV0XkWAlgDzLZs9SCycNSXI").sheet1
+# Configurazione Google Sheets tramite variabile d'ambiente
+credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# --------------------------
-# In-memory database
-# --------------------------
-orders = {}  # chiave: unique_id → dati ordine
+if not credentials_json:
+    raise Exception("Errore: variabile d'ambiente GOOGLE_APPLICATION_CREDENTIALS_JSON mancante")
 
-# --------------------------
-# Webhook WooCommerce
-# --------------------------
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json or {}
+creds_dict = json.loads(credentials_json)
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+client = gspread.authorize(creds)
 
-    # Solo ordini pagati
-    if data.get("status") not in ["processing", "completed"]:
-        return jsonify({"status": "ignored"}), 200
+# ID del foglio Google Sheet
+SHEET_ID = "16v-pieF7pQt7GMoTnjknCV0XkWAlgDzLZs9SCycNSXI"
+SHEET = client.open_by_key(SHEET_ID).sheet1
 
-    order_id = str(data.get("id") or data.get("number") or "test-order")
-    created_at = datetime.now().isoformat()
-    unique_id = str(uuid.uuid4())[:8]
-    tracking_link = f"https://tracking-backend-tb40.onrender.com/track/{unique_id}"  # dominio Render
-
-    # Estrazione dati spedizione
-    shipping = data.get("shipping", {})
-    city = shipping.get("city", "")
-    postcode = shipping.get("postcode", "")
-    country = shipping.get("country", "")
-    service = "APC Priority DDU"  # eventualmente dinamico
-
-    # Salvataggio nel Google Sheet
-    SHEET.append_row([order_id, tracking_link, created_at, service, country, city, postcode])
-
-    # Salvataggio in memoria per demo locale
-    orders[unique_id] = {
-        "order_id": order_id,
-        "created_at": created_at,
-        "service": service,
-        "country": country,
-        "city": city,
-        "postcode": postcode
-    }
-
-    return jsonify({"status": "success", "link": tracking_link}), 200
-
-# --------------------------
-# Endpoint per test locale
-# --------------------------
-@app.route('/')
+# Endpoint di test
+@app.route("/")
 def home():
-    return jsonify({"message": "Tracking API attiva!"})
+    return "Backend Tracking Ordini attivo!"
 
-# --------------------------
-# Pagina di tracking
-# --------------------------
-@app.route('/track/<unique_id>')
-def track(unique_id):
-    order = orders.get(unique_id)
-    if not order:
-        return "<h1 style='text-align:center; color:red;'>Ordine non trovato</h1>", 404
+# Webhook per WooCommerce (ordine completato)
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Nessun JSON ricevuto"}), 400
 
-    # Calcolo giorni passati e step
-    created_date = datetime.fromisoformat(order["created_at"])
-    days_passed = (datetime.now() - created_date).days
-    is_delivered = days_passed >= 21
-    step = 3 if is_delivered else 2 if days_passed > 10 else 1
-    est_start = (created_date + timedelta(days=19)).strftime('%B %d, %Y')
-    est_end = (created_date + timedelta(days=21)).strftime('%B %d, %Y')
+    # Estraggo i dati principali
+    order_id = data.get("id")
+    customer_name = data.get("billing", {}).get("first_name", "") + " " + data.get("billing", {}).get("last_name", "")
+    customer_email = data.get("billing", {}).get("email", "")
+    order_date = data.get("date_created", datetime.datetime.now().isoformat())
+    status = data.get("status", "")
+    total = data.get("total", "")
+    address = data.get("billing", {}).get("address_1", "")
 
-    # Eventi simulati
-    events = [
-        ("Etichetta creata", 0, ""),
-        ("Ordine arrivato APC", 1, "Bell, CA"),
-        ("Processato APC", 1, "Bell, CA"),
-        ("Ordine lasciato APC", 2, "Bell, CA"),
-        ("In transito", 3, "Los Angeles, US"),
-        ("Arrivo aeroporto", 4, "Los Angeles, US"),
-        ("In viaggio verso Italia", 5, "New York, US"),
-        ("Arrivato Italia", 7, "Milan, IT"),
-        ("Dogana", 8, "Malpensa, IT"),
-        ("Ufficio postale", 10, "IT"),
-        ("Tentativo consegna", 12, "IT"),
-        ("Tentativo consegna", 15, "IT"),
-        ("Tentativo consegna", 18, "IT"),
-        ("CONSEGNATO", 21, f"{order['postcode']} {order['country']}")
-    ]
+    # Genero ID univoco per tracking
+    unique_id = str(uuid.uuid4())[:8]
+    tracking_link = f"https://tracking-backend-tb40.onrender.com/track/{unique_id}"  # sostituire con dominio finale
 
-    shown = []
-    for status, day, loc in events:
-        if days_passed >= day:
-            date_str = (created_date + timedelta(days=day)).strftime('%m/%d/%Y %I:%M %p UTC')
-            shown.append(f"""
-                <div style='margin:15px 0; padding:10px; border-left:4px solid #007bff; background:#f9f9f9;'>
-                    <b>{status}</b><br>
-                    <small>{date_str}<br>{loc}</small>
-                </div>
-            """)
+    # Salvo i dati nel Google Sheet
+    SHEET.append_row([order_id, customer_name, customer_email, order_date, status, total, address, tracking_link])
 
-    status_text = "CONSEGNATO" if is_delivered else "IN TRANSITO"
+    return jsonify({"success": True, "tracking_link": tracking_link})
 
-    html = f"""
-    <div style="font-family:Arial; max-width:600px; margin:30px auto; text-align:center; background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px #ccc;">
-        <h1 style="color:#28a745;">{status_text}</h1>
-        <p style="font-size:18px;">Step {step} of 3</p>
-        <h3 style="color:#555;">Estimated Delivery: {est_start} - {est_end}</h3>
-        <hr style="border:1px solid #eee;">
-        <h3 style="text-align:left; color:#333;">Shipment Status:</h3>
-        <div style="text-align:left;">{''.join(reversed(shown))}</div>
-        <hr style="border:1px solid #eee;">
-        <div style="text-align:left;">
-            <b>Package ID:</b> {order['order_id']}<br>
-            <b>Service:</b> {order['service']}<br>
-            <b>Ship To:</b> {order['postcode']} {order['city']} {order['country']}
-        </div>
-        <div style="margin-top:20px;">
-            <a href="/" style="color:#007bff; text-decoration:underline;">Track Another Package</a>
-        </div>
-    </div>
-    """
-    return html
+# Endpoint di tracking (consultazione stato)
+@app.route("/track/<tracking_id>", methods=["GET"])
+def track(tracking_id):
+    records = SHEET.get_all_records()
+    for row in records:
+        if tracking_id in row.get("tracking_link", ""):
+            order_date_str = row.get("order_date") or row.get("data") or ""
+            order_date = datetime.datetime.fromisoformat(order_date_str.replace("Z", ""))
+            days_since = (datetime.datetime.now() - order_date).days
+
+            # Simulazione stato spedizione in base ai giorni passati
+            if days_since < 2:
+                stato = "Ordine in preparazione"
+            elif days_since < 5:
+                stato = "Spedito"
+            elif days_since < 7:
+                stato = "In transito"
+            else:
+                stato = "Consegnato"
+
+            return jsonify({
+                "order_id": row.get("order_id"),
+                "cliente": row.get("customer_name"),
+                "email": row.get("customer_email"),
+                "indirizzo": row.get("address"),
+                "stato": stato,
+                "giorni_trascorsi": days_since
+            })
+
+    return jsonify({"error": "Tracking ID non trovato"}), 404
 
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
