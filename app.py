@@ -1,15 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime, timedelta
 import uuid
+from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 import os
 
-
-
 app = Flask(__name__)
-CORS(app) 
+CORS(app)  # Abilita CORS per tutte le richieste
 
 # --------------------------
 # Configurazione Google Sheet
@@ -38,14 +36,14 @@ def webhook():
     order_id = str(data.get("id") or data.get("number") or "test-order")
     created_at = datetime.now().isoformat()
     unique_id = str(uuid.uuid4())[:8]
-	tracking_link = f"https://tracking-backend-tb40.onrender.com/track/{unique_id}"  # cambia con dominio finale
+    tracking_link = f"https://tracking-backend-tb40.onrender.com/track/{unique_id}"  # dominio Render
 
     # Estrazione dati spedizione
     shipping = data.get("shipping", {})
     city = shipping.get("city", "")
     postcode = shipping.get("postcode", "")
     country = shipping.get("country", "")
-    service = "APC Priority DDU"  # puoi prendere dal prodotto
+    service = "APC Priority DDU"  # eventualmente dinamico
 
     # Salvataggio nel Google Sheet
     SHEET.append_row([order_id, tracking_link, created_at, service, country, city, postcode])
@@ -61,6 +59,13 @@ def webhook():
     }
 
     return jsonify({"status": "success", "link": tracking_link}), 200
+
+# --------------------------
+# Endpoint per test locale
+# --------------------------
+@app.route('/')
+def home():
+    return jsonify({"message": "Tracking API attiva!"})
 
 # --------------------------
 # Pagina di tracking
@@ -130,6 +135,7 @@ def track(unique_id):
     </div>
     """
     return html
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
