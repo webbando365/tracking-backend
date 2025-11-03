@@ -85,22 +85,24 @@ EVENTS_TEMPLATE = [
     {"title": "CONSEGNATO", "day": 21, "loc": ""}
 ]
 
-# ---------- Webhook endpoint ----------
+# ---------- Webhook endpoint (con debug payload) ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    # raw bytes (per signature e debug)
     payload_bytes = request.get_data()
 
-    header_sig = request.headers.get("X-WC-Webhook-Signature", "")
+    # debug: stampa preview del payload (non stampare secret)
     if DEBUG_SIG:
         try:
-            computed_b64, computed_hex = compute_sigs(WC_SECRET, payload_bytes) if WC_SECRET else ("", "")
-        except Exception as e:
-            computed_b64 = computed_hex = "ERR:" + str(e)
-        print("DEBUG: header_sig:", repr(header_sig))
-        print("DEBUG: computed_b64:", repr(computed_b64))
-        print("DEBUG: computed_hex:", repr(computed_hex))
-        print("DEBUG: WC_SECRET present?:", bool(WC_SECRET))
+            preview = payload_bytes[:2000].decode("utf-8", errors="replace")
+        except Exception:
+            preview = str(payload_bytes[:2000])
+        print("DEBUG: content-type:", request.headers.get("Content-Type"))
+        print("DEBUG: payload_length:", len(payload_bytes))
+        print("DEBUG: payload_preview:", preview)
 
+    # verifica signature se WC_SECRET settato
+    header_sig = request.headers.get("X-WC-Webhook-Signature", "")
     if WC_SECRET:
         if not header_sig:
             print("WARN: signature header missing")
@@ -109,19 +111,22 @@ def webhook():
             print("WARN: signature mismatch")
             return jsonify({"error": "Invalid webhook signature"}), 401
 
-    # Robust parsing:
+    # parsing robusto: proviamo più strategie
     data = None
 
-    # Try request.get_json first (Flask may parse automatically)
+    # 1) Flask JSON parser
     if request.is_json:
         try:
             data = request.get_json()
         except Exception:
             data = None
 
-    # If not parsed, try form data
+    # 2) form data
     if data is None:
-        form = request.form.to_dict()
+        try:
+            form = request.form.to_dict()
+        except Exception:
+            form = {}
         if form:
             if len(form) == 1:
                 v = next(iter(form.values()))
@@ -132,26 +137,27 @@ def webhook():
             else:
                 data = form
 
-    # As last resort, try raw bytes -> json
+    # 3) raw JSON parse fallback
     if data is None:
         try:
             data = json.loads(payload_bytes.decode("utf-8"))
         except Exception:
             data = None
 
+    # 4) if still none -> return 400 with hint
     if data is None:
-        return jsonify({"error": "Empty or unparseable payload", "example": "use JSON body"}), 400
+        print("ERROR: Empty or unparseable payload; content-type:", request.headers.get("Content-Type"))
+        return jsonify({"error": "Empty or unparseable payload", "hint": "WooCommerce might be sending data as form-encoded or proxy may alter the body. Enable DEBUG_WC_SIG to see payload preview in logs."}), 400
 
-    # If data is not a dict, try to normalize:
+    # normalize types: if list with dicts, take first element
     if not isinstance(data, dict):
-        # if it's a list with dicts, take first dict
         if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
             data = data[0]
         else:
-            # if it's primitive (int/str), return error with details
+            print("ERROR: Unexpected payload type:", type(data))
             return jsonify({"error": "Unexpected payload type", "type": str(type(data))}), 400
 
-    # Now safe to call data.get
+    # ora sicuro di avere dict
     status = (data.get("status") or "").lower()
     if status not in ["processing", "completed", "on-hold", "paid"]:
         return jsonify({"status": "ignored"}), 200
@@ -290,6 +296,5 @@ def track_html(unique_id):
     """.replace("{uid}", unique_id).replace("{api}", api_url)
     return html
 
-# ---------- Run ----------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
