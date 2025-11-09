@@ -33,7 +33,7 @@ SHEET_ID = "16v-pieF7pQt7GMoTnjknCV0XkWAlgDzLZs9SCycNSXI"
 sheet = gc.open_by_key(SHEET_ID).sheet1
 
 # ---------- Webhook secret and debug ----------
-WC_SECRET = os.environ.get("WC_WEBHOOK_SECRET", "")  # set on Render
+WC_SECRET = os.environ.get("WC_WEBHOOK_SECRET", "")
 DEBUG_SIG = os.environ.get("DEBUG_WC_SIG", "").lower() in ("1", "true", "yes")
 
 # ---------- Helpers ----------
@@ -56,7 +56,6 @@ def parse_datetime_iso(s):
     return None
 
 def make_tracking_link(uid):
-    # Change domain if you add custom domain later
     return "https://tracking-backend-tb40.onrender.com/track/{}".format(uid)
 
 def compute_sigs(secret, payload_bytes):
@@ -70,7 +69,6 @@ def verify_sig(secret, payload_bytes, header_sig):
         return True
     try:
         b64, hexs = compute_sigs(secret, payload_bytes)
-        # compare robustly
         if header_sig == b64 or header_sig == hexs:
             return True
         if header_sig and header_sig.startswith("sha256="):
@@ -80,19 +78,21 @@ def verify_sig(secret, payload_bytes, header_sig):
     except Exception:
         return False
 
-# ---------- Realistic events template ----------
-# offsets in days from order start (you can tweak)
+# ---------- Realistic events template (USA to Europe, 14-day total) ----------
 EVENTS_TEMPLATE = [
-    {"title": "Etichetta creata", "day": 0, "loc": ""},
-    {"title": "Presso magazzino mittente", "day": 1, "loc": ""},
-    {"title": "Spedito dal magazzino", "day": 2, "loc": ""},
-    {"title": "Dogana di partenza", "day": 3, "loc": ""},
-    {"title": "In transito internazionale", "day": 5, "loc": "In transito"},
-    {"title": "Arrivato in aeroporto di destinazione", "day": 9, "loc": "Aeroporto IT"},
-    {"title": "Sdoganamento", "day": 11, "loc": "Dogana IT"},
-    {"title": "Consegnato al centro smistamento locale", "day": 14, "loc": "Ufficio postale locale"},
-    {"title": "In consegna", "day": 18, "loc": "In consegna"},
-    {"title": "CONSEGNATO", "day": 21, "loc": ""}  # final loc replaced by postcode+country
+    {"title": "Label created", "day": 0, "loc": "Los Angeles, CA"},
+    {"title": "Package received at origin facility", "day": 1, "loc": "Los Angeles, CA"},
+    {"title": "Package departed origin facility", "day": 2, "loc": "Los Angeles, CA"},
+    {"title": "Departed from airport of origin", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
+    {"title": "In transit to Europe", "day": 5, "loc": "Over the Atlantic Ocean"},
+    {"title": "Arrived at European airport", "day": 7, "loc": "Frankfurt, DE (Transit Hub)"},
+    {"title": "Departed European airport hub", "day": 8, "loc": "Frankfurt, DE"},
+    {"title": "Arrived at local sorting center", "day": 9, "loc": "Local hub"},
+    {"title": "Departed local sorting center", "day": 10, "loc": "Local hub"},
+    {"title": "Arrived at destination country facility", "day": 11, "loc": "Destination country"},
+    {"title": "In transit to final delivery city", "day": 12, "loc": "Destination country"},
+    {"title": "Customs clearance in progress", "day": 14, "loc": "Destination customs"},
+    {"title": "Customs cleared (final delivery expected)", "day": 16, "loc": ""}
 ]
 
 # ---------- Utility: safe extract for nested keys ----------
@@ -133,21 +133,15 @@ def webhook_inspect():
 # ---------- Webhook endpoint (production) ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    # raw body needed for signature verification
     payload_bytes = request.get_data()
     content_type = request.headers.get("Content-Type", "")
 
-    # If it's a short form ping like webhook_id=1, just ack (200)
     if content_type and "application/x-www-form-urlencoded" in content_type:
-        # often WooCommerce test pings send webhook_id=1
         form = request.form.to_dict()
         if form and ("webhook_id" in form or "webhook" in form):
-            # ack the ping to keep WooCommerce happy
             print("PING received (form):", form)
             return jsonify({"status": "ping acknowledged"}), 200
-        # else continue trying to parse
 
-    # debug logs if requested
     if DEBUG_SIG:
         try:
             b64, hexs = compute_sigs(WC_SECRET, payload_bytes) if WC_SECRET else ("", "")
@@ -160,7 +154,6 @@ def webhook():
         print("DEBUG: header_sig:", repr(request.headers.get("X-WC-Webhook-Signature", "")))
         print("DEBUG: WC_SECRET present?:", bool(WC_SECRET))
 
-    # verify signature if secret is present
     header_sig = request.headers.get("X-WC-Webhook-Signature", "")
     if WC_SECRET:
         if not header_sig:
@@ -170,7 +163,6 @@ def webhook():
             print("WARN: signature mismatch")
             return jsonify({"error": "Invalid webhook signature"}), 401
 
-    # Robust parsing: prefer parsed JSON, fallback to form or raw decode
     data = None
     if request.is_json:
         try:
@@ -179,13 +171,11 @@ def webhook():
             data = None
 
     if data is None:
-        # try form data
         try:
             form = request.form.to_dict()
         except Exception:
             form = {}
         if form:
-            # sometimes WooCommerce wraps JSON inside a single form field
             if len(form) == 1:
                 v = next(iter(form.values()))
                 try:
@@ -196,7 +186,6 @@ def webhook():
                 data = form
 
     if data is None:
-        # try raw JSON decode
         try:
             data = json.loads(payload_bytes.decode("utf-8"))
         except Exception:
@@ -206,7 +195,6 @@ def webhook():
         print("ERROR: Empty or unparseable payload; content-type:", content_type)
         return jsonify({"error": "Empty or unparseable payload", "hint": "Use /webhook-inspect to see raw body"}), 400
 
-    # Normalize if it's a list with one dict
     if not isinstance(data, dict):
         if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
             data = data[0]
@@ -214,14 +202,11 @@ def webhook():
             print("ERROR: Unexpected payload type:", type(data))
             return jsonify({"error": "Unexpected payload type", "type": str(type(data))}), 400
 
-    # Decide whether to process: prefer orders that are paid/processing/completed
     status = (data.get("status") or "").lower()
     if status not in ["processing", "completed", "paid"]:
-        # skip non-final statuses (but ack)
         print("IGNORED order status:", status, "order_id:", data.get("id"))
         return jsonify({"status": "ignored", "order_status": status}), 200
 
-    # Extract reliable timestamps: prefer date_paid, then date_completed, then date_created
     date_paid = data.get("date_paid")
     date_completed = data.get("date_completed")
     date_created = data.get("date_created") or data.get("created_at")
@@ -236,11 +221,9 @@ def webhook():
         chosen_dt = now_utc()
     created_at_iso = chosen_dt.isoformat()
 
-    # Extract order details (safe extraction)
     order_id = str(data.get("id") or data.get("number") or safe_get(data, "order_key") or "")
     billing = data.get("billing") or {}
     shipping = data.get("shipping") or {}
-    # shipping sometimes empty — fallback to billing
     if not shipping or not any(shipping.values()):
         shipping = billing or {}
 
@@ -250,8 +233,7 @@ def webhook():
     country = shipping.get("country", "") or ""
     total = data.get("total") or data.get("order_total") or ""
 
-    # service: try shipping_lines array first
-    service = "APC Priority DDU"
+    service = "International Air Express"
     shipping_lines = data.get("shipping_lines") or data.get("shipping_lines", [])
     if isinstance(shipping_lines, list) and len(shipping_lines) > 0:
         first = shipping_lines[0]
@@ -260,19 +242,15 @@ def webhook():
         else:
             service = str(first)
 
-    # Generate unique ID and tracking link
     unique_id = str(uuid.uuid4())[:8]
     tracking_link = make_tracking_link(unique_id)
 
-    # Save into Google Sheet (columns expected in first row):
-    # Order ID | Tracking Link | Created At | Service | Country | City | Postcode | Customer | Status | Total
     try:
         sheet.append_row([order_id, tracking_link, created_at_iso, service, country, city, postcode, customer_name, status, total])
     except Exception as e:
         print("ERR append_row:", repr(e))
         return jsonify({"error": "Errore salvataggio su Google Sheet", "detail": str(e)}), 500
 
-    # Ok response (WooCommerce expects 200)
     return jsonify({"status": "success", "tracking_link": tracking_link}), 200
 
 # ---------- API: full timeline for frontend ----------
@@ -295,10 +273,9 @@ def api_track(unique_id):
     if not found:
         return jsonify({"error": "Tracking ID non trovato"}), 404
 
-    # Map fields (compatible with different sheet headers)
     order_id = found.get("Order ID") or found.get("order_id") or found.get("Numero Ordine") or found.get("order") or found.get("Order") or ""
     created_at_raw = found.get("Created At") or found.get("created_at") or found.get("Data Ordine") or ""
-    service = found.get("Service") or found.get("service") or "APC Priority DDU"
+    service = found.get("Service") or found.get("service") or "International Air Express"
     country = found.get("Country") or found.get("country") or ""
     city = found.get("City") or found.get("city") or ""
     postcode = found.get("Postcode") or found.get("postcode") or ""
@@ -307,25 +284,25 @@ def api_track(unique_id):
     total = found.get("Total") or found.get("total") or ""
 
     created_dt = parse_datetime_iso(created_at_raw) or now_utc()
-    days_passed = (now_utc() - created_dt).days
-    is_delivered = days_passed >= 21
-    status_text = "CONSEGNATO" if is_delivered else ("IN TRANSITO" if days_passed >= 3 else "IN PREPARAZIONE")
 
-    est_start = (created_dt + timedelta(days=19)).date().isoformat()
-    est_end = (created_dt + timedelta(days=21)).date().isoformat()
+    # Shipment starts 2 days after order creation
+    shipment_start = created_dt + timedelta(days=2)
+    days_passed = (now_utc() - shipment_start).days
+    if days_passed < 0:
+        days_passed = 0
+
+    is_delivered = days_passed >= 16
+    status_text = "DELIVERED" if is_delivered else ("IN TRANSIT" if days_passed >= 3 else "PREPARING SHIPMENT")
+
+    est_start = (shipment_start + timedelta(days=14)).date().isoformat()
+    est_end = est_start
 
     events = []
     for ev in EVENTS_TEMPLATE:
-        ev_date = created_dt + timedelta(days=ev["day"])
+        ev_date = shipment_start + timedelta(days=ev["day"])
         loc = ev["loc"]
-        if ev["title"] == "CONSEGNATO":
+        if ev["title"].startswith("Customs cleared"):
             loc = "{} {}".format(postcode, country).strip()
-        # For minor realism: if event day is before 3 and city is blank use "Origin"
-        if not loc:
-            if ev["day"] <= 3:
-                loc = "Origin"
-            else:
-                loc = ev.get("loc", "")
         events.append({
             "title": ev["title"],
             "day_offset": ev["day"],
@@ -365,7 +342,7 @@ def track_html(unique_id):
       <body style="font-family:Arial,Helvetica,sans-serif; background:#f2f4f7; padding:20px;">
         <div style="max-width:900px;margin:20px auto;background:#fff;padding:20px;border-radius:8px;">
           <h2>Tracking ID: {uid}</h2>
-          <pre id="content">Caricamento...</pre>
+          <pre id="content">Loading...</pre>
         </div>
         <script>
           (function(){
@@ -374,7 +351,7 @@ def track_html(unique_id):
               .then(function(j){
                 document.getElementById('content').innerText = JSON.stringify(j, null, 2);
               }).catch(function(e){
-                document.getElementById('content').innerText = "Errore: " + e;
+                document.getElementById('content').innerText = "Error: " + e;
               });
           })();
         </script>
