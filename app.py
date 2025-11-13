@@ -85,14 +85,15 @@ EVENTS_TEMPLATE = [
     {"title": "Package departed origin facility", "day": 2, "loc": "Los Angeles, CA"},
     {"title": "Departed from airport of origin", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
     {"title": "In transit to Europe", "day": 5, "loc": "Over the Atlantic Ocean"},
-    {"title": "Arrived at European airport", "day": 7, "loc": "Frankfurt, DE (Transit Hub)"},
-    {"title": "Departed European airport hub", "day": 8, "loc": "Frankfurt, DE"},
-    {"title": "Arrived at local sorting center", "day": 9, "loc": "Local hub"},
-    {"title": "Departed local sorting center", "day": 10, "loc": "Local hub"},
+    {"title": "Arrived at European transit facility", "day": 7, "loc": "Warsaw, PL (Transit Hub)"},
+    {"title": "Departed European transit facility", "day": 8, "loc": "Warsaw, PL"},
+    {"title": "Arrived at local sorting center", "day": 10, "loc": "Local hub"},
     {"title": "Arrived at destination country facility", "day": 11, "loc": "Destination country"},
-    {"title": "In transit to final delivery city", "day": 12, "loc": "Destination country"},
-    {"title": "Customs clearance in progress", "day": 14, "loc": "Destination customs"},
+    {"title": "Customs clearance initiated (in progress)", "day": 12, "loc": "Destination customs"},
+    {"title": "Ending customs clearance", "day": 14, "loc": "Destination customs"},
     {"title": "Customs cleared (final delivery expected)", "day": 16, "loc": ""}
+    {"title": "In transit to final delivery city", "day": 17, "loc": "Destination country"},
+    {"title": "Attempted delivery - contact us to reschedule", "day": 19, "loc": "Destination country"},
 ]
 
 # ---------- Utility: safe extract for nested keys ----------
