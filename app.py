@@ -78,8 +78,8 @@ def verify_sig(secret, payload_bytes, header_sig):
     except Exception:
         return False
 
-# ---------- Realistic events template (USA to Europe, 14-day total) ----------
-EVENTS_TEMPLATE = [
+# ---------- Realistic events templates (USA to Europe, 14-day total) ----------
+EVENTS_TEMPLATE_EN = [
     {"title": "Label created", "day": 0, "loc": "Los Angeles, CA"},
     {"title": "Package received at origin facility", "day": 1, "loc": "Los Angeles, CA"},
     {"title": "Package departed origin facility", "day": 2, "loc": "Los Angeles, CA"},
@@ -91,10 +91,92 @@ EVENTS_TEMPLATE = [
     {"title": "Arrived at destination country facility", "day": 11, "loc": "Destination country"},
     {"title": "Customs clearance initiated (in progress)", "day": 12, "loc": "Destination customs"},
     {"title": "Ending customs clearance", "day": 14, "loc": "Destination customs"},
-    {"title": "Customs cleared (final delivery expected)", "day": 16, "loc": ""}
+    {"title": "Customs cleared (final delivery expected)", "day": 16, "loc": ""},
     {"title": "In transit to final delivery city", "day": 17, "loc": "Destination country"},
     {"title": "Attempted delivery - contact us to reschedule", "day": 19, "loc": "Destination country"},
 ]
+
+EVENTS_TEMPLATE_IT = [
+    {"title": "Etichetta creata", "day": 0, "loc": "Los Angeles, CA"},
+    {"title": "Pacco ricevuto nella struttura di origine", "day": 1, "loc": "Los Angeles, CA"},
+    {"title": "Pacco partito dalla struttura di origine", "day": 2, "loc": "Los Angeles, CA"},
+    {"title": "Partito dall'aeroporto di origine", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
+    {"title": "In transito verso l'Europa", "day": 5, "loc": "Sopra l'Oceano Atlantico"},
+    {"title": "Arrivato nella struttura di transito europea", "day": 7, "loc": "Varsavia, PL (Hub di transito)"},
+    {"title": "Partito dalla struttura di transito europea", "day": 8, "loc": "Varsavia, PL"},
+    {"title": "Arrivato al centro di smistamento locale", "day": 10, "loc": "Hub locale"},
+    {"title": "Arrivato nella struttura del paese di destinazione", "day": 11, "loc": "Paese di destinazione"},
+    {"title": "Sdoganamento avviato (in corso)", "day": 12, "loc": "Dogana di destinazione"},
+    {"title": "Conclusione sdoganamento", "day": 14, "loc": "Dogana di destinazione"},
+    {"title": "Sdoganamento completato (consegna finale prevista)", "day": 16, "loc": ""},
+    {"title": "In transito verso la città di consegna finale", "day": 17, "loc": "Paese di destinazione"},
+    {"title": "Tentativo di consegna - contattaci per riprogrammare", "day": 19, "loc": "Paese di destinazione"},
+]
+
+EVENTS_TEMPLATE_DE = [
+    {"title": "Etikett erstellt", "day": 0, "loc": "Los Angeles, CA"},
+    {"title": "Paket in der Ursprungseinrichtung erhalten", "day": 1, "loc": "Los Angeles, CA"},
+    {"title": "Paket hat Ursprungseinrichtung verlassen", "day": 2, "loc": "Los Angeles, CA"},
+    {"title": "Vom Ursprungsflughafen abgeflogen", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
+    {"title": "Auf dem Weg nach Europa", "day": 5, "loc": "Über dem Atlantischen Ozean"},
+    {"title": "In europäischer Transiteinrichtung angekommen", "day": 7, "loc": "Warschau, PL (Transit-Hub)"},
+    {"title": "Europäische Transiteinrichtung verlassen", "day": 8, "loc": "Warschau, PL"},
+    {"title": "Im lokalen Sortierzentrum angekommen", "day": 10, "loc": "Lokales Hub"},
+    {"title": "In der Einrichtung des Ziellandes angekommen", "day": 11, "loc": "Zielland"},
+    {"title": "Zollabfertigung eingeleitet (in Bearbeitung)", "day": 12, "loc": "Zoll am Zielort"},
+    {"title": "Abschluss der Zollabfertigung", "day": 14, "loc": "Zoll am Zielort"},
+    {"title": "Zollabfertigung abgeschlossen (endgültige Lieferung erwartet)", "day": 16, "loc": ""},
+    {"title": "Auf dem Weg zur endgültigen Lieferstadt", "day": 17, "loc": "Zielland"},
+    {"title": "Zustellversuch - kontaktieren Sie uns zur Neuplanung", "day": 19, "loc": "Zielland"},
+]
+
+EVENTS_TEMPLATE_SE = [
+    {"title": "Etikett skapat", "day": 0, "loc": "Los Angeles, CA"},
+    {"title": "Paket mottaget vid ursprungsanläggning", "day": 1, "loc": "Los Angeles, CA"},
+    {"title": "Paket har lämnat ursprungsanläggning", "day": 2, "loc": "Los Angeles, CA"},
+    {"title": "Avgått från ursprungsflygplats", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
+    {"title": "På väg till Europa", "day": 5, "loc": "Över Atlanten"},
+    {"title": "Anlänt till europeisk transitanläggning", "day": 7, "loc": "Warszawa, PL (Transitnav)"},
+    {"title": "Lämnat europeisk transitanläggning", "day": 8, "loc": "Warszawa, PL"},
+    {"title": "Anlänt till lokalt sorteringscenter", "day": 10, "loc": "Lokalt nav"},
+    {"title": "Anlänt till destinationslandets anläggning", "day": 11, "loc": "Destinationsland"},
+    {"title": "Tullklarering påbörjad (pågår)", "day": 12, "loc": "Destinationstull"},
+    {"title": "Avslutar tullklarering", "day": 14, "loc": "Destinationstull"},
+    {"title": "Tullklarerad (slutlig leverans förväntas)", "day": 16, "loc": ""},
+    {"title": "På väg till slutgiltig leveransstad", "day": 17, "loc": "Destinationsland"},
+    {"title": "Leveransförsök - kontakta oss för ombokning", "day": 19, "loc": "Destinationsland"},
+]
+
+EVENTS_TEMPLATE_NL = [
+    {"title": "Label aangemaakt", "day": 0, "loc": "Los Angeles, CA"},
+    {"title": "Pakket ontvangen bij oorsprongsfaciliteit", "day": 1, "loc": "Los Angeles, CA"},
+    {"title": "Pakket vertrokken van oorsprongsfaciliteit", "day": 2, "loc": "Los Angeles, CA"},
+    {"title": "Vertrokken van oorsprongsluchthaven", "day": 3, "loc": "Los Angeles International Airport (LAX)"},
+    {"title": "Onderweg naar Europa", "day": 5, "loc": "Boven de Atlantische Oceaan"},
+    {"title": "Aangekomen bij Europese transitfaciliteit", "day": 7, "loc": "Warschau, PL (Transithub)"},
+    {"title": "Vertrokken van Europese transitfaciliteit", "day": 8, "loc": "Warschau, PL"},
+    {"title": "Aangekomen bij lokaal sorteercentrum", "day": 10, "loc": "Lokale hub"},
+    {"title": "Aangekomen bij faciliteit van bestemmingsland", "day": 11, "loc": "Bestemmingsland"},
+    {"title": "Douaneafhandeling gestart (in behandeling)", "day": 12, "loc": "Douane bestemming"},
+    {"title": "Beëindiging douaneafhandeling", "day": 14, "loc": "Douane bestemming"},
+    {"title": "Douane afgehandeld (definitieve levering verwacht)", "day": 16, "loc": ""},
+    {"title": "Onderweg naar definitieve leveringsstad", "day": 17, "loc": "Bestemmingsland"},
+    {"title": "Bezorgpoging - neem contact op voor herplanning", "day": 19, "loc": "Bestemmingsland"},
+]
+
+# Funzione per scegliere il template in base al paese
+def get_events_template(country_code):
+    country = (country_code or "").upper()
+    if country == "IT":
+        return EVENTS_TEMPLATE_IT
+    elif country in ["DE", "AT", "CH"]:
+        return EVENTS_TEMPLATE_DE
+    elif country in ["SE", "NO", "DK"]:
+        return EVENTS_TEMPLATE_SE
+    elif country in ["NL", "BE"]:
+        return EVENTS_TEMPLATE_NL
+    else:
+        return EVENTS_TEMPLATE_EN
 
 # ---------- Utility: safe extract for nested keys ----------
 def safe_get(d, *keys, default=""):
@@ -298,11 +380,15 @@ def api_track(unique_id):
     est_start = (shipment_start + timedelta(days=14)).date().isoformat()
     est_end = est_start
 
+    # Seleziona il template degli eventi in base al paese
+    events_template = get_events_template(country)
+    
     events = []
-    for ev in EVENTS_TEMPLATE:
+    for ev in events_template:
         ev_date = shipment_start + timedelta(days=ev["day"])
         loc = ev["loc"]
-        if ev["title"].startswith("Customs cleared"):
+        # Controlla se è l'evento finale di sdoganamento (giorno 16 in tutti i template)
+        if ev["day"] == 16:
             loc = "{} {}".format(postcode, country).strip()
         events.append({
             "title": ev["title"],
